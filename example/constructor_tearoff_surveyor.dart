@@ -58,8 +58,12 @@ void main(List<String> args) async {
   print('(Elapsed time: $duration)');
   print('');
   _summarize(collector._typeLiterals, 'type literal');
-  _summarize(collector._highConfidenceTearoffs, 'high confidence tearoff');
-  _summarize(collector._possibleTearoffs, 'possible tearoff');
+  for (var confidenceEntry in collector._tearoffs.entries) {
+    for (var namednessEntry in confidenceEntry.value.entries) {
+      _summarize(namednessEntry.value,
+          '${confidenceEntry.key} confidence ${namednessEntry.key} tearoff');
+    }
+  }
 }
 
 int dirCount = 0;
@@ -69,16 +73,21 @@ int _debugLimit = 0;
 
 void _summarize(List<String> instances, String what) {
   var s = instances.length == 1 ? '' : 's';
-  print('Found ${instances.length} $what$s');
+  print('***** Found ${instances.length} $what$s');
   for (var instance in instances) {
     print('  $instance');
   }
-} //500;
+}
 
 class _Collector extends RecursiveAstVisitor {
   final List<String> _typeLiterals = [];
-  final List<String> _highConfidenceTearoffs = [];
-  final List<String> _possibleTearoffs = [];
+
+  final Map<String, Map<String, List<String>>> _tearoffs = {
+    for (var confidence in ['high', 'low'])
+      confidence: {
+        for (var namedness in ['unnamed', 'named']) namedness: []
+      }
+  };
 
   void visitBlockFunctionBody(BlockFunctionBody node) {
     var statements = node.block.statements;
@@ -125,12 +134,14 @@ class _Collector extends RecursiveAstVisitor {
       }
     }
     var formalParametersParent = formalParameters?.parent;
-    if (formalParametersParent is FunctionExpression &&
-        formalParametersParent.parent is! FunctionDeclaration) {
-      _record(_highConfidenceTearoffs, expression);
-    } else {
-      _record(_possibleTearoffs, expression);
-    }
+    var confidence = formalParametersParent is FunctionExpression &&
+            formalParametersParent.parent is! FunctionDeclaration
+        ? 'high'
+        : 'low';
+    var namedness = expression.constructorName.staticElement!.name.isEmpty
+        ? 'unnamed'
+        : 'named';
+    _record(_tearoffs[confidence]![namedness]!, expression);
   }
 
   FormalParameterList? _extractFormalParameters(AstNode? parent) {
@@ -164,3 +175,7 @@ class _Collector extends RecursiveAstVisitor {
     instances.add('$node at $offset in ${compilationUnit?.declaredElement}');
   }
 }
+
+enum _Confidence { low, high }
+
+enum _Namedness { unnamed, named }
