@@ -35,7 +35,10 @@ void main(List<String> args) async {
     print('Limiting analysis to $_debugLimit packages.');
   }
 
-  var collector = _Collector();
+  var outputs = <String, List<Object>>{};
+  var collector = _Collector((key, value) {
+    (outputs[key] ??= []).add(value);
+  });
 
   var stopwatch = Stopwatch()..start();
 
@@ -53,12 +56,8 @@ void main(List<String> args) async {
 
   print('(Elapsed time: $duration)');
   print('');
-  _summarize(collector._typeLiterals, 'type literal');
-  for (var confidenceEntry in collector._tearoffs.entries) {
-    for (var namednessEntry in confidenceEntry.value.entries) {
-      _summarize(namednessEntry.value,
-          '${confidenceEntry.key} confidence ${namednessEntry.key} tearoff');
-    }
+  for (var entry in outputs.entries) {
+    _show(entry.key, _reduce(entry.value));
   }
 }
 
@@ -67,23 +66,22 @@ int dirCount = 0;
 /// If non-zero, stops once limit is reached (for debugging).
 int _debugLimit = 0;
 
-void _summarize(List<String> instances, String what) {
-  var s = instances.length == 1 ? '' : 's';
-  print('***** Found ${instances.length} $what$s');
-  for (var instance in instances) {
-    print('  $instance');
+Object _reduce(List<Object> values) {
+  var total = 0;
+  for (var value in values) {
+    total += value as int;
   }
+  return total;
+}
+
+void _show(String key, Object value) {
+  print('$key: $value');
 }
 
 class _Collector extends RecursiveAstVisitor {
-  final List<String> _typeLiterals = [];
+  final void Function(String key, Object value) _output;
 
-  final Map<String, Map<String, List<String>>> _tearoffs = {
-    for (var confidence in ['high', 'low'])
-      confidence: {
-        for (var namedness in ['unnamed', 'named']) namedness: []
-      }
-  };
+  _Collector(this._output);
 
   @override
   void visitBlockFunctionBody(BlockFunctionBody node) {
@@ -141,7 +139,7 @@ class _Collector extends RecursiveAstVisitor {
     var namedness = expression.constructorName.staticElement!.name.isEmpty
         ? 'unnamed'
         : 'named';
-    _record(_tearoffs[confidence]![namedness]!, expression);
+    _output('$confidence confidence $namedness constructor tearoff', 1);
   }
 
   FormalParameterList? _extractFormalParameters(AstNode? parent) {
@@ -163,15 +161,9 @@ class _Collector extends RecursiveAstVisitor {
       if (typeElement.library.isDartCore && typeElement.name == 'Type') {
         var element = node.staticElement;
         if (element is TypeDefiningElement) {
-          _record(_typeLiterals, node);
+          _output('type literal', 1);
         }
       }
     }
-  }
-
-  void _record(List<String> instances, AstNode node) {
-    var compilationUnit = node.thisOrAncestorOfType<CompilationUnit>();
-    var offset = node.offset;
-    instances.add('$node at $offset in ${compilationUnit?.declaredElement}');
   }
 }
