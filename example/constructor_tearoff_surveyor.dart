@@ -82,7 +82,7 @@ abstract class _Analysis<Value> {
 }
 
 class _Collector extends RecursiveAstVisitor {
-  final void Function(String key, int value) _output;
+  final void Function(String key, _CountAndExamples value) _output;
 
   _Collector(this._output);
 
@@ -142,7 +142,8 @@ class _Collector extends RecursiveAstVisitor {
     var namedness = expression.constructorName.staticElement!.name.isEmpty
         ? 'unnamed'
         : 'named';
-    _output('$confidence confidence $namedness constructor tearoff', 1);
+    _output('$confidence confidence $namedness constructor tearoff',
+        _item(formalParametersParent ?? expression));
   }
 
   FormalParameterList? _extractFormalParameters(AstNode? parent) {
@@ -164,29 +165,49 @@ class _Collector extends RecursiveAstVisitor {
       if (typeElement.library.isDartCore && typeElement.name == 'Type') {
         var element = node.staticElement;
         if (element is TypeDefiningElement) {
-          _output('type literal', 1);
+          _output('type literal', _item(node));
         }
       }
     }
   }
+
+  _CountAndExamples _item(AstNode node) {
+    var source =
+        node.thisOrAncestorOfType<CompilationUnit>()!.declaredElement!.source;
+    var offset = node.offset;
+    return _CountAndExamples(1, ['$source@$offset: $node']);
+  }
 }
 
-class _ConstructorTearoffAnalysis extends _Analysis<int> {
+class _ConstructorTearoffAnalysis extends _Analysis<_CountAndExamples> {
   @override
-  AstVisitor _createVisitor(void Function(String, int) output) =>
+  AstVisitor _createVisitor(void Function(String, _CountAndExamples) output) =>
       _Collector(output);
 
   @override
-  int _reduce(List<int> values) {
+  _CountAndExamples _reduce(List<_CountAndExamples> values) {
     var total = 0;
+    var examples = <String>[];
     for (var value in values) {
-      total += value;
+      total += value._count;
+      examples.addAll(value._examples);
     }
-    return total;
+    return _CountAndExamples(total, examples);
   }
 
   @override
-  void _show(String key, int value) {
+  void _show(String key, _CountAndExamples value) {
     print('$key: $value');
+    for (var example in value._examples) {
+      print('- $example');
+    }
   }
+}
+
+class _CountAndExamples {
+  final int _count;
+
+  final List<String> _examples;
+
+  _CountAndExamples(this._count, this._examples);
 }
