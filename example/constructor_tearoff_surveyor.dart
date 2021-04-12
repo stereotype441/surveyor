@@ -12,6 +12,7 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:analyzer/dart/ast/ast.dart';
@@ -55,16 +56,21 @@ int _debugLimit = 0;
 abstract class _Analysis<Value> {
   Future<void> run(List<String> args) async {
     var outputs = <String, List<Value>>{};
+    var outputFile = File('output.log').openWrite();
+    try {
+      var driver = Driver.forArgs(args);
+      driver.forceSkipInstall = true;
+      driver.showErrors = false;
+      driver.resolveUnits = true;
+      driver.visitor = _createVisitor((key, value) {
+        (outputs[key] ??= []).add(value);
+        outputFile.writeln(json.encode({key: _toJson(value)}));
+      });
 
-    var driver = Driver.forArgs(args);
-    driver.forceSkipInstall = true;
-    driver.showErrors = false;
-    driver.resolveUnits = true;
-    driver.visitor = _createVisitor((key, value) {
-      (outputs[key] ??= []).add(value);
-    });
-
-    await driver.analyze();
+      await driver.analyze();
+    } finally {
+      await outputFile.close();
+    }
 
     var results = {
       for (var entry in outputs.entries) entry.key: _reduce(entry.value)
@@ -79,6 +85,8 @@ abstract class _Analysis<Value> {
   Value _reduce(List<Value> values);
 
   void _show(String key, Value value);
+
+  Object _toJson(Value value);
 }
 
 class _Collector extends RecursiveAstVisitor {
@@ -197,11 +205,11 @@ class _ConstructorTearoffAnalysis extends _Analysis<_CountAndExamples> {
 
   @override
   void _show(String key, _CountAndExamples value) {
-    print('$key: $value');
-    for (var example in value._examples) {
-      print('- $example');
-    }
+    print('$key: ${value._count}');
   }
+
+  @override
+  Object _toJson(_CountAndExamples value) => value.toJson();
 }
 
 class _CountAndExamples {
@@ -210,4 +218,6 @@ class _CountAndExamples {
   final List<String> _examples;
 
   _CountAndExamples(this._count, this._examples);
+
+  Object toJson() => {'count': _count, 'examples': _examples};
 }
