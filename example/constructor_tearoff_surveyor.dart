@@ -129,24 +129,54 @@ class _Collector extends RecursiveAstVisitor {
   void _checkForSimpleConstructorInvocation(
       Expression? expression, FormalParameterList? formalParameters) {
     if (expression is! InstanceCreationExpression) return;
-    late var formalParameterElements = {
-      for (var parameter in formalParameters?.parameters ?? const [])
-        parameter.declaredElement
-    };
+    var formalParametersParent = formalParameters?.parent;
+    var isFunctionExpression = formalParametersParent is FunctionExpression &&
+        formalParametersParent.parent is! FunctionDeclaration;
+    if (!isFunctionExpression) return;
+    var highConfidence = true;
+    var formalParameterElements = <ParameterElement>{};
+    var unnamedParameters = <ParameterElement>[];
+    var namedParameters = <String, ParameterElement>{};
+    for (var parameter
+        in formalParameters?.parameters ?? const <FormalParameter>[]) {
+      var element = parameter.declaredElement;
+      if (element == null) {
+        highConfidence = false;
+        continue;
+      }
+      formalParameterElements.add(element);
+      if (element.isNamed) {
+        namedParameters[element.name] = element;
+      } else {
+        unnamedParameters.add(element);
+      }
+    }
+    var unnamedArgumentCount = 0;
+    var namedArgumentCount = 0;
     for (var argument in expression.argumentList.arguments) {
+      ParameterElement? element;
       if (argument is NamedExpression) {
+        element = namedParameters[argument.name.label.name];
         argument = argument.expression;
+        namedArgumentCount++;
+      } else {
+        element = unnamedParameters[unnamedArgumentCount++];
       }
       if (argument is! SimpleIdentifier) return;
       if (!formalParameterElements.contains(argument.staticElement)) {
         return;
       }
+      if (!identical(element, argument.staticElement)) {
+        highConfidence = false;
+      }
     }
-    var formalParametersParent = formalParameters?.parent;
-    var confidence = formalParametersParent is FunctionExpression &&
-            formalParametersParent.parent is! FunctionDeclaration
-        ? 'high'
-        : 'low';
+    if (unnamedArgumentCount != unnamedParameters.length) {
+      highConfidence = false;
+    }
+    if (namedArgumentCount != namedParameters.length) {
+      highConfidence = false;
+    }
+    var confidence = highConfidence ? 'high' : 'low';
     var namedness = expression.constructorName.staticElement!.name.isEmpty
         ? 'unnamed'
         : 'named';
