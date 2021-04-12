@@ -18,11 +18,7 @@ import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/visitor.dart';
 import 'package:analyzer/dart/element/element.dart';
 import 'package:analyzer/dart/element/type.dart';
-import 'package:analyzer/file_system/file_system.dart' hide File;
-import 'package:analyzer/source/line_info.dart';
-import 'package:path/path.dart' as path;
 import 'package:surveyor/src/driver.dart';
-import 'package:surveyor/src/visitors.dart';
 
 void main(List<String> args) async {
   if (args.length == 1) {
@@ -89,6 +85,7 @@ class _Collector extends RecursiveAstVisitor {
       }
   };
 
+  @override
   void visitBlockFunctionBody(BlockFunctionBody node) {
     var statements = node.block.statements;
     if (statements.length == 1) {
@@ -101,17 +98,20 @@ class _Collector extends RecursiveAstVisitor {
     super.visitBlockFunctionBody(node);
   }
 
+  @override
   void visitExpressionFunctionBody(ExpressionFunctionBody node) {
     _checkForSimpleConstructorInvocation(
         node.expression, _extractFormalParameters(node.parent));
     super.visitExpressionFunctionBody(node);
   }
 
+  @override
   void visitPrefixedIdentifier(PrefixedIdentifier node) {
     _handleIdentifier(node);
     super.visitPrefixedIdentifier(node);
   }
 
+  @override
   void visitSimpleIdentifier(SimpleIdentifier node) {
     _handleIdentifier(node);
     super.visitSimpleIdentifier(node);
@@ -175,7 +175,3 @@ class _Collector extends RecursiveAstVisitor {
     instances.add('$node at $offset in ${compilationUnit?.declaredElement}');
   }
 }
-
-enum _Confidence { low, high }
-
-enum _Namedness { unnamed, named }
