@@ -82,7 +82,7 @@ abstract class _Analysis<Value> {
 }
 
 class _Collector extends RecursiveAstVisitor {
-  final void Function(String key, Object value) _output;
+  final void Function(String key, int value) _output;
 
   _Collector(this._output);
 
@@ -171,22 +171,22 @@ class _Collector extends RecursiveAstVisitor {
   }
 }
 
-class _ConstructorTearoffAnalysis extends _Analysis<Object> {
+class _ConstructorTearoffAnalysis extends _Analysis<int> {
   @override
-  AstVisitor _createVisitor(void Function(String, Object) output) =>
+  AstVisitor _createVisitor(void Function(String, int) output) =>
       _Collector(output);
 
   @override
-  Object _reduce(List<Object> values) {
+  int _reduce(List<int> values) {
     var total = 0;
     for (var value in values) {
-      total += value as int;
+      total += value;
     }
     return total;
   }
 
   @override
-  void _show(String key, Object value) {
+  void _show(String key, int value) {
     print('$key: $value');
   }
 }
