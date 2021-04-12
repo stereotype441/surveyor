@@ -35,30 +35,16 @@ void main(List<String> args) async {
     print('Limiting analysis to $_debugLimit packages.');
   }
 
-  var outputs = <String, List<Object>>{};
-  var collector = _Collector((key, value) {
-    (outputs[key] ??= []).add(value);
-  });
-
   var stopwatch = Stopwatch()..start();
 
-  var driver = Driver.forArgs(args);
-  driver.forceSkipInstall = true;
-  driver.showErrors = false;
-  driver.resolveUnits = true;
-  driver.visitor = collector;
-
-  await driver.analyze();
+  _Analysis<Object> analysis = _ConstructorTearoffAnalysis();
+  await analysis.run(args);
 
   stopwatch.stop();
 
   var duration = Duration(milliseconds: stopwatch.elapsedMilliseconds);
 
   print('(Elapsed time: $duration)');
-  print('');
-  for (var entry in outputs.entries) {
-    _show(entry.key, _reduce(entry.value));
-  }
 }
 
 int dirCount = 0;
@@ -66,16 +52,33 @@ int dirCount = 0;
 /// If non-zero, stops once limit is reached (for debugging).
 int _debugLimit = 0;
 
-Object _reduce(List<Object> values) {
-  var total = 0;
-  for (var value in values) {
-    total += value as int;
-  }
-  return total;
-}
+abstract class _Analysis<Value> {
+  Future<void> run(List<String> args) async {
+    var outputs = <String, List<Value>>{};
 
-void _show(String key, Object value) {
-  print('$key: $value');
+    var driver = Driver.forArgs(args);
+    driver.forceSkipInstall = true;
+    driver.showErrors = false;
+    driver.resolveUnits = true;
+    driver.visitor = _createVisitor((key, value) {
+      (outputs[key] ??= []).add(value);
+    });
+
+    await driver.analyze();
+
+    var results = {
+      for (var entry in outputs.entries) entry.key: _reduce(entry.value)
+    };
+    for (var entry in results.entries) {
+      _show(entry.key, entry.value);
+    }
+  }
+
+  AstVisitor<dynamic> _createVisitor(void Function(String, Value) output);
+
+  Value _reduce(List<Value> values);
+
+  void _show(String key, Value value);
 }
 
 class _Collector extends RecursiveAstVisitor {
@@ -165,5 +168,25 @@ class _Collector extends RecursiveAstVisitor {
         }
       }
     }
+  }
+}
+
+class _ConstructorTearoffAnalysis extends _Analysis<Object> {
+  @override
+  AstVisitor _createVisitor(void Function(String, Object) output) =>
+      _Collector(output);
+
+  @override
+  Object _reduce(List<Object> values) {
+    var total = 0;
+    for (var value in values) {
+      total += value as int;
+    }
+    return total;
+  }
+
+  @override
+  void _show(String key, Object value) {
+    print('$key: $value');
   }
 }
